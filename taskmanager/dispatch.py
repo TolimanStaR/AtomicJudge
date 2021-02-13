@@ -1,4 +1,4 @@
-from .models import Task, SolutionCase, TestCase, Status
+from .models import Task, SolutionCase, TestCase, Status, Language
 import multiprocessing
 import time
 
@@ -7,7 +7,23 @@ class TaskManager(object):
     def __init__(self, solution: SolutionCase):
         self.solution: SolutionCase = solution
 
-    
+    def check_solution(self):
+        pass
+
+    def build_executable(self, language: Language):
+        pass
+
+    def run_all_tests(self):
+        pass
+
+    def run_test(self, test: TestCase):
+        pass
+
+    def get_build_command(self):
+        pass
+
+    def execute_command(self):
+        pass
 
 
 class QueueManager(object):
