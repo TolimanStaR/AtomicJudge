@@ -30,11 +30,12 @@ class Language(models.TextChoices):
     PYTHON_3_8 = 'Python 3.8'
     PYPY = 'PyPy'
     JAVA_11 = 'Java 11'
-    RUBY = 'Ruby'
+    RUBY_2_7 = 'Ruby'
     KOTLIN = 'Kotlin'
     GOLANG = 'GoLang'
     CSHARP = 'C#'
     BASH = 'Bash'
+    # LAMA = 'Lama'
 
 
 class LanguageType(models.IntegerChoices):
@@ -63,15 +64,17 @@ class TaskBase(models.Model):
 
 
 class Task(TaskBase):
-    pass
+    is_tested = models.BooleanField(default=False)
 
 
 class SolutionCase(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
-    user = models.ForeignKey()  # TODO: add f.k. to user model
+    user = models.AutoField()  # TODO: add f.k. to user model
     code = models.TextField()
     created = models.DateField(auto_now_add=True, )
     language = models.TextField(choices=Language.choices, )
+    language_type = models.IntegerField(default=LanguageType.COMPILE)
+    file_name = models.CharField(max_length=100)
     verdict = models.Field(choices=Verdict.choices, default=Verdict.QUEUED)
     status = models.IntegerField(choices=Status.choices, default=Status.NOT_CHECKED)
     serving_note = models.IntegerField(default=0)
