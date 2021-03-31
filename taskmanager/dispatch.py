@@ -1,4 +1,4 @@
-from .models import Task, SolutionCase, TestCase, Status, Language, LanguageType
+from .models import Task, SolutionCase, TestCase, Status, Language, LanguageType, language_extension
 import multiprocessing
 import subprocess
 import time
@@ -27,7 +27,17 @@ class TaskManager(object):
             os.mkdir(os.path.join(self.working_dir, self.env_dir))
         else:
             os.system(f'rm -rf {os.path.join(self.working_dir, self.env_dir, "*")}')
-        user_solution_path: str = os.path.join(self.working_dir, self.env_dir, self.solution_source)
+
+        try:
+            ext: str = language_extension[self.solution.language]
+        except KeyError:
+            pass
+
+        user_solution_path: str = os.path.join(self.working_dir, self.env_dir, f'{self.solution.file_name}.{ext}')
+        os.system(f'touch {user_solution_path}')
+        os.system(f'chmod 722 {user_solution_path}')
+        os.system(f'echo {self.solution.code} > {user_solution_path}')
+
         if self.solution.language_type == LanguageType.COMPILE:
             command: str = self.get_build_command(self.solution.file_name, self.solution.language)
             code: int = self.__build__(user_solution_path, command)
