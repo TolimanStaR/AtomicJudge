@@ -1,5 +1,7 @@
 import threading
 import datetime
+import os
+import psycopg2
 from django.db import models
 
 from django.utils.translation import gettext_lazy as _
@@ -66,17 +68,86 @@ class SingletonMixin(object):
         return cls.__singleton_instance
 
 
+class DataBase(SingletonMixin):
+    def __init__(self):
+        passwd = os.getenv('COURSEWORK2_DB_PASSWORD')
+        self.connection = psycopg2.connect(dbname='age-of-python',
+                                           user='postgres',
+                                           password=f'{passwd}',
+                                           host='185.139.70.166')
+        self.cursor = self.connection.cursor()
+
+    def execute(self, sql_request, *params):
+        self.cursor.execute(sql_request, params)
+
+    def result(self):
+        return self.cursor.fetchall()
+
+    def commit(self):
+        self.connection.commit()
+
+    def close_connection(self):
+        self.connection.close()
+
+    def __str__(self):
+        pass
+
+
 class CodeFile(object):
     def __init__(self, **kwargs):
-        pass
+        self.id = None
+        self.solution: Solution or None = None
+
+        self.set_attributes(**kwargs)
+
+    def set_attributes(self, **kwargs):
+        for key in kwargs.keys():
+            setattr(self, key, kwargs[key])
+
+    def __str__(self):
+        return f'Class CodeFile \n' \
+               f'id: {self.id}'
+
+    def get_solution(self):
+        return self.solution
+
+    def set_solution(self, solution: 'Solution'):
+        self.solution = solution
 
 
 class Solution(object):
     def __init__(self, **kwargs):
-        print(kwargs)
+        self.code_file_id = None
+        self.verdict = None
+        self.status = None
+        self.id = None
+        self.code_file: CodeFile or None = None
+
+        self.set_attributes(**kwargs)
+
+    def set_attributes(self, **kwargs):
+        for key in kwargs.keys():
+            setattr(self, key, kwargs[key])
 
     def __str__(self):
-        return f'Solution object {id(self)}'
+        return f'Class Solution \n' \
+               f'id: {self.id}\n' \
+               f'status: {self.status}\n' \
+               f'verdict: {self.verdict}'
 
     def __update__(self, field, value):
-        pass
+        sql_request = f'''UPDATE management_solution
+                        SET {field} = '{value}'
+                        WHERE id = {self.id};'''
+        db = DataBase()
+        db.execute(sql_request=sql_request)
+        db.commit()
+
+    def get_code_file_id(self):
+        return self.code_file_id
+
+    def get_code_file(self):
+        return self.code_file
+
+    def set_code_file(self, code_file: CodeFile):
+        self.code_file = code_file

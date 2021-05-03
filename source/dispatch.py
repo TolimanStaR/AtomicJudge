@@ -7,36 +7,12 @@ import datetime
 
 from .config import NODE_NUMBER
 
-from .models import SingletonMixin, Solution, Status
+from .models import SingletonMixin, Solution, Status, DataBase, CodeFile
 
 from .service import sequence_to_dict
 
 from .static import class_Solution_attributes
-
-
-class DataBase(SingletonMixin):
-    def __init__(self):
-        passwd = os.getenv('COURSEWORK2_DB_PASSWORD')
-        self.connection = psycopg2.connect(dbname='age-of-python',
-                                           user='postgres',
-                                           password=f'{passwd}',
-                                           host='185.139.70.166')
-        self.cursor = self.connection.cursor()
-
-    def execute(self, sql_request, *params):
-        self.cursor.execute(sql_request, params)
-
-    def result(self):
-        return self.cursor.fetchall()
-
-    def commit(self):
-        self.connection.commit()
-
-    def close_connection(self):
-        self.connection.close()
-
-    def __str__(self):
-        pass
+from .static import class_CodeFile_attributes
 
 
 class Node(SingletonMixin):
@@ -57,7 +33,8 @@ class Node(SingletonMixin):
         while True:
             sql = f'''SELECT *
                 FROM management_solution
-                WHERE management_solution.status='{Status.WAIT_FOR_CHECK}';'''
+                WHERE management_solution.status='{Status.WAIT_FOR_CHECK}'
+                AND management_solution.node={self.node_number};'''
 
             db.execute(sql)
 
@@ -65,6 +42,24 @@ class Node(SingletonMixin):
                 attributes = sequence_to_dict(solution_data, class_Solution_attributes)
                 new_solution = Solution(**attributes)
                 self.solutions_queue.put(new_solution)
+                new_solution.__update__('status', Status.QUEUED)
+                print(new_solution)
+
+                sql = f'''SELECT * 
+                FROM management_codefile
+                WHERE id={new_solution.get_code_file_id()};'''
+
+                db.execute(sql)
+                new_code_file = None
+
+                for code_file_data in db.result():
+                    attributes = sequence_to_dict(code_file_data, class_CodeFile_attributes)
+                    new_code_file = CodeFile(**attributes)
+
+                if new_code_file is not None:
+                    new_code_file.set_solution(new_solution)
+
+                new_solution.set_code_file(new_code_file)
 
             time.sleep(5)
 

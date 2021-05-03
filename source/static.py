@@ -7,6 +7,7 @@ class_Solution_attributes = (
     'verdict',
     'verdict_text',
     'task_id',
+    'node',
 )
 
 class_CodeFile_attributes = (
