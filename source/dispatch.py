@@ -7,7 +7,7 @@ import datetime
 
 from typing import List
 
-from .config import NODE_NUMBER
+from .config import *
 
 from .models import SingletonMixin, Solution, Status, DataBase, CodeFile, Event, Test
 
@@ -22,7 +22,7 @@ from .task_manager import TaskManager
 
 class Node(SingletonMixin):
     def __init__(self, **kwargs):
-        node_number = os.getenv('NODE')
+        node_number = os.getenv(NODE_NUMBER_ENVIRONMENT_VAR)
         if node_number is None:
             node_number = NODE_NUMBER
 
@@ -35,25 +35,16 @@ class Node(SingletonMixin):
 
     def catch_new_solutions_from_db(self):
         db = DataBase()
-        while True:
-            sql = f'''SELECT *
-                FROM management_solution
-                WHERE management_solution.status='{Status.WAIT_FOR_CHECK}'
-                AND management_solution.node={self.node_number};'''
 
-            db.execute(sql)
+        while True:
+            db.execute(SQL_GET_SOLUTION, Status.WAIT_FOR_CHECK, self.node_number)
 
             for solution_data in db.result():
                 attributes = sequence_to_dict(solution_data, class_Solution_attributes)
                 new_solution = Solution(**attributes)
+                new_solution.__update__(field='status', value=Status.QUEUED)
 
-                new_solution.__update__('status', Status.QUEUED)
-
-                sql = f'''SELECT * 
-                FROM management_codefile
-                WHERE id={new_solution.get_code_file_id()};'''
-
-                db.execute(sql)
+                db.execute(SQL_GET_CODE_FILE, new_solution.get_code_file_id())
                 new_code_file = None
 
                 for code_file_data in db.result():
@@ -65,18 +56,11 @@ class Node(SingletonMixin):
 
                 new_solution.set_code_file(new_code_file)
 
-                solution_task_id = new_solution.task_id
-
-                sql = f'''SELECT *
-                FROM management_test
-                WHERE task_id={solution_task_id}'''
-
-                db.execute(sql)
+                db.execute(SQL_GET_TESTS, new_solution.task_id)
                 tests: List[Test] = []
 
                 for test_data in db.result():
                     attributes = sequence_to_dict(test_data, class_Test_attributes)
-                    print(attributes)
                     new_test = Test(**attributes)
                     tests.append(new_test)
 
@@ -84,13 +68,15 @@ class Node(SingletonMixin):
                 self.event_queue.put(new_event)
 
             print(self.event_queue.qsize())
-            time.sleep(5)
+            time.sleep(CATCH_SOLUTIONS_DELAY)
 
     def handle_solutions_queue(self):
         while True:
             s = self.get_solution_from_queue()
             print(s)
             time.sleep(3)
+
+            # TODO: send every event to TaskManager
 
     def get_solution_from_queue(self):
         return self.event_queue.get()

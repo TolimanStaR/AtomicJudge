@@ -6,6 +6,8 @@ from django.db import models
 
 from django.utils.translation import gettext_lazy as _
 
+from .config import *
+
 
 # This classes must be the same with similar in web-application
 
@@ -18,6 +20,17 @@ class TaskAnswerType(models.TextChoices):
 class TaskExecuteType(models.TextChoices):
     JUST_RUN = 'run', _('Only run source')
     BUILD_AND_RUN = 'build && run', _('Build binary, then run it')
+
+
+class SolutionEventType(models.TextChoices):
+    USER_TASK_SOLUTION = 'USER_SOLUTION', _('User solution to task')
+    AUTHOR_TASK_VALIDATION = 'TASK_VALIDATION', _('Validation of authors task (all tests)')
+
+
+class TaskGradingSystem(models.TextChoices):
+    BINARY = 'BINARY', _('Accepted or failed')
+    BINARY_FOR_EACH_TEST = 'BINARY TEST', _('1 Point for each test')
+    N_POINTS_FOR_EACH_TEST = 'POINTS TEST', _('N points for each test')
 
 
 class Language(models.TextChoices):
@@ -49,6 +62,7 @@ class Verdict(models.TextChoices):
     TIME_LIMIT_ERROR = 'TIME LIMIT ERROR', _('Time limit error')
     MEMORY_LIMIT_ERROR = 'MEMORY LIMIT ERROR', _('Memory limit error')
     WRONG_ANSWER = 'WRONG ANSWER', _('Wrong answer')
+    PARTIAL_SOLUTION = 'PARTIAL SOLUTION', _('Partial solution')
     CORRECT_SOLUTION = 'CORRECT SOLUTION', _('Correct solution')
 
 
@@ -70,11 +84,11 @@ class SingletonMixin(object):
 
 class DataBase(SingletonMixin):
     def __init__(self):
-        passwd = os.getenv('COURSEWORK2_DB_PASSWORD')
-        self.connection = psycopg2.connect(dbname='age-of-python',
-                                           user='postgres',
+        passwd = os.getenv(DATABASE_PASSWORD_VAR)
+        self.connection = psycopg2.connect(dbname=DB_NAME,
+                                           user=DB_USER,
                                            password=f'{passwd}',
-                                           host='185.139.70.166')
+                                           host=DB_HOST, )
         self.cursor = self.connection.cursor()
 
     def execute(self, sql_request, *params):
@@ -111,6 +125,7 @@ class Test(object):
 
 class CodeFile(object):
     def __init__(self, **kwargs):
+        self.file_name = None
         self.id = None
         self.solution: Solution or None = None
 
@@ -154,11 +169,8 @@ class Solution(object):
                f'verdict: {self.verdict}'
 
     def __update__(self, field, value):
-        sql_request = f'''UPDATE management_solution
-                        SET {field} = '{value}'
-                        WHERE id = {self.id};'''
         db = DataBase()
-        db.execute(sql_request=sql_request)
+        db.execute(SQL_UPDATE_SOLUTION, field, value, self.id)
         db.commit()
 
     def get_code_file_id(self):
@@ -174,7 +186,8 @@ class Solution(object):
 class Event(object):
 
     def __init__(self, solution: Solution, tests: "Any iterable"):
-        self.solution = solution
+        self.solution: Solution = solution
+        self.code_file = solution.code_file
         self.tests = tests
 
     def set_attributes(self, **kwargs):

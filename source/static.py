@@ -17,6 +17,7 @@ class_CodeFile_attributes = (
     'file',
     'language',
     'code',
+    'file_name',
 )
 
 class_Test_attributes = (
