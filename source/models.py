@@ -93,6 +93,22 @@ class DataBase(SingletonMixin):
         pass
 
 
+class Test(object):
+    def __init__(self, **kwargs):
+        self.id = None
+        self.task_id = None
+        self.set_attributes(**kwargs)
+
+    def set_attributes(self, **kwargs):
+        for key in kwargs.keys():
+            setattr(self, key, kwargs[key])
+
+    def __str__(self):
+        return f'class Test\n' \
+               f'id: {self.id}\n' \
+               f'task id: {self.task_id}'
+
+
 class CodeFile(object):
     def __init__(self, **kwargs):
         self.id = None
@@ -117,6 +133,8 @@ class CodeFile(object):
 
 class Solution(object):
     def __init__(self, **kwargs):
+        self.event_type = None
+        self.task_id = None
         self.code_file_id = None
         self.verdict = None
         self.status = None
@@ -151,3 +169,24 @@ class Solution(object):
 
     def set_code_file(self, code_file: CodeFile):
         self.code_file = code_file
+
+
+class Event(object):
+
+    def __init__(self, solution: Solution, tests: "Any iterable"):
+        self.solution = solution
+        self.tests = tests
+
+    def set_attributes(self, **kwargs):
+        for key in kwargs.keys():
+            setattr(self, key, kwargs[key])
+
+    def get_all_tests(self):
+        return self.tests
+
+    def __str__(self):
+        return f'class Event\n' \
+               f'event type: {self.solution.event_type}\n' \
+               f'solution id: {self.solution.id}\n' \
+               f'task id: {self.solution.task_id}\n' \
+               f'~ with {len(self.tests)} tests'

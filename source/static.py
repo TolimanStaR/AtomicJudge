@@ -8,6 +8,8 @@ class_Solution_attributes = (
     'verdict_text',
     'task_id',
     'node',
+    'event_type',
+    'points',
 )
 
 class_CodeFile_attributes = (
@@ -15,4 +17,11 @@ class_CodeFile_attributes = (
     'file',
     'language',
     'code',
+)
+
+class_Test_attributes = (
+    'task_id',
+    'content',
+    'right_answer',
+    'max_points',
 )
