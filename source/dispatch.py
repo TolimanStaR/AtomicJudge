@@ -70,13 +70,15 @@ class Node(SingletonMixin):
             print(self.event_queue.qsize())
             time.sleep(CATCH_SOLUTIONS_DELAY)
 
-    def handle_solutions_queue(self):
+    def handle_events_queue(self):
         while True:
-            s = self.get_solution_from_queue()
-            print(s)
+            e = self.get_event_from_queue()
+            print(e)
+            t = TaskManager(event=e)
+            t.check_solution_event()
             time.sleep(3)
 
             # TODO: send every event to TaskManager
 
-    def get_solution_from_queue(self):
+    def get_event_from_queue(self):
         return self.event_queue.get()

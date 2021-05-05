@@ -1,6 +1,8 @@
 import threading
 import datetime
 import os
+from typing import List
+
 import psycopg2
 from django.db import models
 
@@ -17,7 +19,7 @@ class TaskAnswerType(models.TextChoices):
     VARIABLE_ANSWER = 'VA', _('Variable answer')
 
 
-class TaskExecuteType(models.TextChoices):
+class CodeExecuteType(models.TextChoices):
     JUST_RUN = 'run', _('Only run source')
     BUILD_AND_RUN = 'build && run', _('Build binary, then run it')
 
@@ -94,7 +96,7 @@ class DataBase(SingletonMixin):
     def execute(self, sql_request, *params):
         self.cursor.execute(sql_request, params)
 
-    def result(self):
+    def result(self) -> str:
         return self.cursor.fetchall()
 
     def commit(self):
@@ -128,6 +130,8 @@ class CodeFile(object):
         self.file_name = None
         self.id = None
         self.solution: Solution or None = None
+        self.code = None
+        self.language = None
 
         self.set_attributes(**kwargs)
 
@@ -170,13 +174,16 @@ class Solution(object):
 
     def __update__(self, field, value):
         db = DataBase()
-        db.execute(SQL_UPDATE_SOLUTION, field, value, self.id)
+        # db.execute(SQL_UPDATE_SOLUTION, field, value, self.id)
+        db.execute('''UPDATE management_solution
+                        SET {field} = '{value}'
+                        WHERE id = {id};'''.format(field=field, value=value, id=self.id))
         db.commit()
 
-    def get_code_file_id(self):
+    def get_code_file_id(self) -> int:
         return self.code_file_id
 
-    def get_code_file(self):
+    def get_code_file(self) -> CodeFile:
         return self.code_file
 
     def set_code_file(self, code_file: CodeFile):
@@ -188,13 +195,13 @@ class Event(object):
     def __init__(self, solution: Solution, tests: "Any iterable"):
         self.solution: Solution = solution
         self.code_file = solution.code_file
-        self.tests = tests
+        self.tests: List[Test] = tests
 
     def set_attributes(self, **kwargs):
         for key in kwargs.keys():
             setattr(self, key, kwargs[key])
 
-    def get_all_tests(self):
+    def get_all_tests(self) -> List[Test]:
         return self.tests
 
     def __str__(self):

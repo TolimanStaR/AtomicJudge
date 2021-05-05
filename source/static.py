@@ -1,4 +1,6 @@
-class_Solution_attributes = (
+from typing import Tuple
+
+class_Solution_attributes: Tuple = (
     'id',
     'author_id',
     'code_file_id',
@@ -12,7 +14,7 @@ class_Solution_attributes = (
     'points',
 )
 
-class_CodeFile_attributes = (
+class_CodeFile_attributes: Tuple = (
     'id',
     'file',
     'language',
@@ -20,9 +22,12 @@ class_CodeFile_attributes = (
     'file_name',
 )
 
-class_Test_attributes = (
+class_Test_attributes: Tuple = (
     'task_id',
     'content',
     'right_answer',
     'max_points',
 )
+
+read_mode: str = 'r'
+write_mode: str = 'w'
