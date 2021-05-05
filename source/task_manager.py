@@ -105,8 +105,13 @@ class BuildHandler(object):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-
-        build_process.wait(timeout=10)  # ???
+        log = open(os.path.join(self.working_dir,
+                                TaskManager.env_dir,
+                                self.build_log_file_name), 'a')
+        log.write(build_process.communicate()[0].decode('utf-8'))
+        log.write(build_process.communicate()[1].decode('utf-8'))
+        log.close()
+        print('code is ', build_process.poll())
 
     def get_build_command(self, source_path: str,
                           exe_path: str,
