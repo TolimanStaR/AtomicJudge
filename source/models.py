@@ -45,6 +45,7 @@ class Language(models.TextChoices):
     GNU_CXX_20 = 'C++20', _('GNU G++ C++ 20')
     PYTHON_2_7 = 'Python2', _('Python v2.7')
     PYTHON_3_9 = 'Python3', _('Python v3.9.4')
+    JAVA_8 = 'Java8', _('Java 8')
 
 
 class Status(models.TextChoices):
@@ -175,9 +176,7 @@ class Solution(object):
     def __update__(self, field, value):
         db = DataBase()
         # db.execute(SQL_UPDATE_SOLUTION, field, value, self.id)
-        db.execute('''UPDATE management_solution
-                        SET {field} = '{value}'
-                        WHERE id = {id};'''.format(field=field, value=value, id=self.id))
+        db.execute(SQL_UPDATE_SOLUTION.format(field=field, value=value, id=self.id))
         db.commit()
 
     def get_code_file_id(self) -> int:

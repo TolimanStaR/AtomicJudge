@@ -6,6 +6,8 @@ import source.models
 
 from .static import *
 
+from .config import BUILD_SOURCE_MAX_TIME
+
 
 class TaskManager(object):
     env_dir: str = 'environment'
@@ -58,7 +60,7 @@ class TaskManager(object):
                                                                        self.env_dir,
                                                                        self.code_file.file_name),
                                          language=self.code_file.language)
-            build_handler.build()
+            ret_code = build_handler.build()
 
 
 class BuildHandler(object):
@@ -84,6 +86,7 @@ class BuildHandler(object):
             source.models.Language.GNU_CXX_20: source.models.CodeExecuteType.BUILD_AND_RUN,
             source.models.Language.PYTHON_2_7: source.models.CodeExecuteType.JUST_RUN,
             source.models.Language.PYTHON_3_9: source.models.CodeExecuteType.JUST_RUN,
+            source.models.Language.JAVA_8: source.models.CodeExecuteType.BUILD_AND_RUN,
         }
         try:
             return lang_info[language]
@@ -105,13 +108,22 @@ class BuildHandler(object):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+
+        try:
+            build_process.wait(BUILD_SOURCE_MAX_TIME)
+        except subprocess.TimeoutExpired:
+            return 1
+
         log = open(os.path.join(self.working_dir,
                                 TaskManager.env_dir,
                                 self.build_log_file_name), 'a')
         log.write(build_process.communicate()[0].decode('utf-8'))
         log.write(build_process.communicate()[1].decode('utf-8'))
         log.close()
-        print('code is ', build_process.poll())
+
+        print('code is', build_process.poll())
+
+        return build_process.poll()
 
     def get_build_command(self, source_path: str,
                           exe_path: str,
@@ -126,6 +138,7 @@ class BuildHandler(object):
             source.models.Language.GNU_CXX_14: self.gbc_gnu_gxx_cxx14,
             source.models.Language.GNU_CXX_17: self.gbc_gnu_gxx_cxx17,
             source.models.Language.GNU_CXX_20: self.gbc_gnu_gxx_cxx20,
+            source.models.Language.JAVA_8: self.gbc_gnu_gxx_cxx20,
         }
 
         try:
@@ -164,6 +177,10 @@ class BuildHandler(object):
     @staticmethod
     def gbc_gnu_gxx_cxx20(source_path: str, exe_path: str, log: str):
         return f'g++ -std=c++2a {source_path} -o {exe_path} -Wall -v -O3 -Ofast > {log}'
+
+    @staticmethod
+    def gbc_java8(source_path: str, exe_path: str, log: str):
+        return f'javac {source_path} > {log}'
 
 
 class ExecuteHandler(object):

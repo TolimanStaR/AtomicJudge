@@ -19,8 +19,10 @@ SQL_GET_TESTS: str = f'''SELECT *
                 FROM management_test
                 WHERE task_id=%s'''
 
-SQL_UPDATE_SOLUTION: str = f'''UPDATE management_solution
-                        SET %s = '%s'
-                        WHERE id = %s;'''
+SQL_UPDATE_SOLUTION: str = '''UPDATE management_solution
+                        SET {field} = '{value}'
+                        WHERE id = {id};'''
 
 CATCH_SOLUTIONS_DELAY: int = 5  # Time in seconds
+
+BUILD_SOURCE_MAX_TIME: int = 15  # Time in seconds
