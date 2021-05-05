@@ -45,14 +45,15 @@ class TaskManager(object):
 
     def check_solution_event(self):
         self.prepare_environment()
-        self.__build__()
+        if self.__build__() != 0:
+            self.solution.__update__('verdict', source.models.Verdict.BUILD_FAILED)
 
         # build -> for t in test -> check test
 
     def validate_task_event(self):
         self.prepare_environment()
 
-    def __build__(self):
+    def __build__(self) -> 'Return code':
         if BuildHandler.get_execution_type(
                 self.code_file.language
         ) == source.models.CodeExecuteType.BUILD_AND_RUN:
@@ -60,12 +61,16 @@ class TaskManager(object):
                                                                        self.env_dir,
                                                                        self.code_file.file_name),
                                          language=self.code_file.language)
-            ret_code = build_handler.build()
+            return build_handler.build()
+        return -1
+
+    def __execute__(self):
+        pass
 
 
 class BuildHandler(object):
     executable_file_name: str = 'solution_executable'
-    build_log_file_name: str = 'log.out'
+    build_log_file_name: str = 'build_log.out'
 
     def __init__(self, source_file_path: str, language: source.models.Language):
         print('build init')
@@ -138,7 +143,7 @@ class BuildHandler(object):
             source.models.Language.GNU_CXX_14: self.gbc_gnu_gxx_cxx14,
             source.models.Language.GNU_CXX_17: self.gbc_gnu_gxx_cxx17,
             source.models.Language.GNU_CXX_20: self.gbc_gnu_gxx_cxx20,
-            source.models.Language.JAVA_8: self.gbc_gnu_gxx_cxx20,
+            source.models.Language.JAVA_8: self.gbc_java8,
         }
 
         try:
@@ -180,8 +185,97 @@ class BuildHandler(object):
 
     @staticmethod
     def gbc_java8(source_path: str, exe_path: str, log: str):
-        return f'javac {source_path} > {log}'
+        return f'javac -cp "{os.path.join(os.getcwd(), TaskManager.env_dir)}" {source_path} > {log}'
 
 
 class ExecuteHandler(object):
-    pass
+    execute_log_file_name: str = 'execute_log.out'
+
+    def __init__(self, executable_file_path: str,
+                 language: source.models.Language,
+                 time_limit: int):
+        self.executable_path = executable_file_path
+        self.language = language
+        self.time_limit = time_limit
+
+    def get_execute_command(self):
+        execute_command: dict = {
+            source.models.Language.GNU_ASM: self.gec_gnu_asm,
+            source.models.Language.GNU_C99: self.gec_gnu_gcc_c99,
+            source.models.Language.GNU_C11: self.gec_gnu_gcc_c11,
+            source.models.Language.GNU_CXX_11: self.gec_gnu_gxx_cxx11,
+            source.models.Language.GNU_CXX_14: self.gec_gnu_gxx_cxx14,
+            source.models.Language.GNU_CXX_17: self.gec_gnu_gxx_cxx17,
+            source.models.Language.GNU_CXX_20: self.gec_gnu_gxx_cxx20,
+            source.models.Language.PYTHON_2_7: self.gec_python2,
+            source.models.Language.PYTHON_3_9: self.gec_python3,
+            source.models.Language.JAVA_8: self.gec_java8,
+        }
+
+        try:
+            return execute_command[self.language](self.executable_path)
+        except KeyError:
+            return None
+
+    @staticmethod
+    def get_iostream_route():
+        wd: str = os.getcwd()
+        env: str = TaskManager.env_dir
+        in_s: str = TaskManager.input_file_name
+        out_s: str = TaskManager.input_file_name
+        return f' < {os.path.join(wd, env, in_s)} > {os.path.join(wd, env, out_s)}'
+
+    @staticmethod
+    def gec_gnu_asm(executable_path: str):
+        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+
+    @staticmethod
+    def gec_gnu_gcc_c99(executable_path: str):
+        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+
+    @staticmethod
+    def gec_gnu_gcc_c11(executable_path: str):
+        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+
+    @staticmethod
+    def gec_gnu_gxx_cxx11(executable_path: str):
+        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+
+    @staticmethod
+    def gec_gnu_gxx_cxx14(executable_path: str):
+        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+
+    @staticmethod
+    def gec_gnu_gxx_cxx17(executable_path: str):
+        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+
+    @staticmethod
+    def gec_gnu_gxx_cxx20(executable_path: str):
+        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+
+    @staticmethod
+    def gec_python2(executable_path: str):
+        return f'python2 {executable_path}' + ExecuteHandler.get_iostream_route()
+
+    @staticmethod
+    def gec_python3(executable_path: str):
+        return f'python3 {executable_path}' + ExecuteHandler.get_iostream_route()
+
+    @staticmethod
+    def gec_java8(executable_path: str):
+        env_dir_path: str = os.path.join(os.getcwd(), TaskManager.env_dir)
+        return f'java -cp "{env_dir_path}/:{env_dir_path}/*" Main' + ExecuteHandler.get_iostream_route()
+
+    def execute(self):
+        execute_command: str = self.get_execute_command()
+
+        execute_process = subprocess.Popen(execute_command,
+                                           shell=True,
+                                           stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE)
+
+        try:
+            execute_process.wait(self.time_limit)
+        except subprocess.TimeoutExpired:
+            execute_process.kill()
+            pass  # todo: add return code

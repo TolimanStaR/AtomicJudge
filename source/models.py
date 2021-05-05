@@ -175,7 +175,6 @@ class Solution(object):
 
     def __update__(self, field, value):
         db = DataBase()
-        # db.execute(SQL_UPDATE_SOLUTION, field, value, self.id)
         db.execute(SQL_UPDATE_SOLUTION.format(field=field, value=value, id=self.id))
         db.commit()
 
