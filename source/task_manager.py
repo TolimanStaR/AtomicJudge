@@ -65,7 +65,7 @@ class TaskManager(object):
         return -1
 
     def __execute__(self):
-        pass
+        execute_handler = ExecuteHandler(os.path.join(self.working_dir, self.env_dir, self.))
 
 
 class BuildHandler(object):
@@ -198,6 +198,14 @@ class ExecuteHandler(object):
         self.language = language
         self.time_limit = time_limit
 
+        # Only for java:
+
+        try:
+            self.executable_class = executable_file_path.split('/')[-1].split('.')[0]
+            print(self.executable_class)
+        except IndexError:
+            pass
+
     def get_execute_command(self):
         execute_command: dict = {
             source.models.Language.GNU_ASM: self.gec_gnu_asm,
@@ -213,7 +221,7 @@ class ExecuteHandler(object):
         }
 
         try:
-            return execute_command[self.language](self.executable_path)
+            return execute_command[self.language](self.executable_path, exe_class=self.executable_class)
         except KeyError:
             return None
 
@@ -262,9 +270,9 @@ class ExecuteHandler(object):
         return f'python3 {executable_path}' + ExecuteHandler.get_iostream_route()
 
     @staticmethod
-    def gec_java8(executable_path: str):
+    def gec_java8(executable_path: str, **kwargs):
         env_dir_path: str = os.path.join(os.getcwd(), TaskManager.env_dir)
-        return f'java -cp "{env_dir_path}/:{env_dir_path}/*" Main' + ExecuteHandler.get_iostream_route()
+        return f'java -cp "{env_dir_path}/:{env_dir_path}/*" {kwargs["executable_class"]}' + ExecuteHandler.get_iostream_route()
 
     def execute(self):
         execute_command: str = self.get_execute_command()
@@ -279,3 +287,14 @@ class ExecuteHandler(object):
         except subprocess.TimeoutExpired:
             execute_process.kill()
             pass  # todo: add return code
+
+        status = execute_process.poll()
+
+        execute_process.kill()
+        stdout, stderr = execute_process.communicate()
+        log = open(os.path.join(os.getcwd(), TaskManager.env_dir, self.execute_log_file_name), 'a')
+
+        log.write(stdout.decode('utf-8'))
+        log.write(stderr.decode('utf-8'))
+
+        return status
