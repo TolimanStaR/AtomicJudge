@@ -48,6 +48,9 @@ class TaskManager(object):
         if self.__build__() != 0:
             self.solution.__update__('verdict', source.models.Verdict.BUILD_FAILED)
 
+        if self.__execute__() != 0:
+            self.solution.__update__('verdict', source.models.Verdict.RUNTIME_ERROR)
+
         # build -> for t in test -> check test
 
     def validate_task_event(self):
@@ -65,7 +68,22 @@ class TaskManager(object):
         return -1
 
     def __execute__(self):
-        execute_handler = ExecuteHandler(os.path.join(self.working_dir, self.env_dir, self.))
+        execute_handler = ExecuteHandler(self.get_execute_path(self.code_file.language), self.code_file.language)
+
+        """
+        todo: get execute path. for c/c++ it is ~/env/{a.exe}, 
+        for python it is just source and for java it is class name
+        """
+
+    def get_execute_path(self, language: source.models.Language):
+        execute_path = {
+
+        }
+
+        try:
+            return execute_path[language]
+        except KeyError:
+            return None
 
 
 class BuildHandler(object):
@@ -199,6 +217,7 @@ class ExecuteHandler(object):
         self.time_limit = time_limit
 
         # Only for java:
+        # may be unused:
 
         try:
             self.executable_class = executable_file_path.split('/')[-1].split('.')[0]
@@ -272,7 +291,7 @@ class ExecuteHandler(object):
     @staticmethod
     def gec_java8(executable_path: str, **kwargs):
         env_dir_path: str = os.path.join(os.getcwd(), TaskManager.env_dir)
-        return f'java -cp "{env_dir_path}/:{env_dir_path}/*" {kwargs["executable_class"]}' + ExecuteHandler.get_iostream_route()
+        return f'java -cp "{env_dir_path}/:{env_dir_path}/*" {executable_path}' + ExecuteHandler.get_iostream_route()
 
     def execute(self):
         execute_command: str = self.get_execute_command()
