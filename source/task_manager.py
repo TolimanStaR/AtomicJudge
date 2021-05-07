@@ -6,7 +6,7 @@ import source.models
 
 from .static import *
 
-from .config import BUILD_SOURCE_MAX_TIME
+from .config import BUILD_SOURCE_MAX_TIME, SQL_GET_TASK_ATTRIBUTE
 
 
 class TaskManager(object):
@@ -56,6 +56,12 @@ class TaskManager(object):
     def validate_task_event(self):
         self.prepare_environment()
 
+    def __get_task_grading_system__(self):
+        return source.models.Task.get_attribute('grading_system', self.solution.task_id)
+
+    def __get_task_time_limit__(self):
+        return source.models.Task.get_attribute('time_limit', self.solution.task_id)
+
     def __build__(self) -> 'Return code':
         if BuildHandler.get_execution_type(
                 self.code_file.language
@@ -68,22 +74,45 @@ class TaskManager(object):
         return -1
 
     def __execute__(self):
-        execute_handler = ExecuteHandler(self.get_execute_path(self.code_file.language), self.code_file.language)
+        execute_handler = ExecuteHandler(executable_file_path=self.get_execute_path(self.code_file.language),
+                                         language=self.code_file.language,
+                                         time_limit=self.__get_task_time_limit__())
+
+        execute_handler.execute()
 
         """
         todo: get execute path. for c/c++ it is ~/env/{a.exe}, 
         for python it is just source and for java it is class name
         """
 
+    # noinspection DuplicatedCode
     def get_execute_path(self, language: source.models.Language):
         execute_path = {
-
+            source.models.Language.GNU_ASM: self.get_gnu_exe_path,
+            source.models.Language.GNU_C99: self.get_gnu_exe_path,
+            source.models.Language.GNU_C11: self.get_gnu_exe_path,
+            source.models.Language.GNU_CXX_11: self.get_gnu_exe_path,
+            source.models.Language.GNU_CXX_14: self.get_gnu_exe_path,
+            source.models.Language.GNU_CXX_17: self.get_gnu_exe_path,
+            source.models.Language.GNU_CXX_20: self.get_gnu_exe_path,
+            source.models.Language.PYTHON_2_7: self.get_absolute_path,
+            source.models.Language.PYTHON_3_9: self.get_absolute_path,
+            source.models.Language.JAVA_8: self.get_class_name,
         }
 
         try:
-            return execute_path[language]
+            return execute_path[language]()
         except KeyError:
             return None
+
+    def get_absolute_path(self):
+        return os.path.join(self.working_dir, self.env_dir, self.code_file.file_name)
+
+    def get_gnu_exe_path(self):
+        return os.path.join(self.working_dir, self.env_dir, BuildHandler.executable_file_name)
+
+    def get_class_name(self):
+        return self.code_file.file_name.split('.')[0]
 
 
 class BuildHandler(object):

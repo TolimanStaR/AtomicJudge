@@ -23,6 +23,10 @@ SQL_UPDATE_SOLUTION: str = '''UPDATE management_solution
                         SET {field} = '{value}'
                         WHERE id = {id};'''
 
+SQL_GET_TASK_ATTRIBUTE: str = '''SELECT management_abstracttask.{attribute}
+FROM management_abstracttask
+WHERE id={id}'''
+
 CATCH_SOLUTIONS_DELAY: int = 5  # Time in seconds
 
 BUILD_SOURCE_MAX_TIME: int = 15  # Time in seconds

@@ -208,3 +208,11 @@ class Event(object):
                f'solution id: {self.solution.id}\n' \
                f'task id: {self.solution.task_id}\n' \
                f'~ with {len(self.tests)} tests'
+
+
+class Task(object):
+    @staticmethod
+    def get_attribute(column: str, id: int):
+        db = DataBase()
+        db.execute(SQL_GET_TASK_ATTRIBUTE.format(column, id))
+        return db.result()
