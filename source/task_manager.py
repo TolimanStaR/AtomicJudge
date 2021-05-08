@@ -4,10 +4,11 @@ import subprocess
 from typing import List
 
 import source.models
+from .service import sequence_to_dict
 
 from .static import *
 
-from .config import BUILD_SOURCE_MAX_TIME, SQL_GET_TASK_ATTRIBUTE
+from .config import BUILD_SOURCE_MAX_TIME, SQL_GET_TASK_ATTRIBUTE, SQL_GET_CODE_FILE
 
 
 class TaskManager(object):
@@ -67,14 +68,23 @@ class TaskManager(object):
             user_output = output_file.readlines()
             output_file.close()
 
-            if self.__get_task_answer_type__() == source.models.TaskAnswerType.CONSTANT_ANSWER:
-                if not self.is_constant_answer_valid(user_output=user_output, test_number=test_number):
-                    self.solution.__update__('verdict', source.models.Verdict.WRONG_ANSWER)
-                else:
+            # if self.__get_task_answer_type__() == source.models.TaskAnswerType.CONSTANT_ANSWER:
+            #     if not self.is_constant_answer_valid(user_output=user_output, test_number=test_number):
+            #         self.solution.__update__('verdict', source.models.Verdict.WRONG_ANSWER)
+            #     else:
+            #         correct_tests_number += 1
+            # else:
+            #     """Variable answer.
+            #     todo: build && execute judge solution with input = user output && output one of [true, false]"""
+
+            answer_type = self.__get_task_answer_type__()
+            grading_system = self.__get_task_grading_system__()
+
+            if answer_type == source.models.TaskAnswerType.CONSTANT_ANSWER:
+                if self.is_constant_answer_valid(user_output=user_output, test_number=test_number):
                     correct_tests_number += 1
-            else:
-                """Variable answer. 
-                todo: build && execute judge solution with input = user output && output one of [true, false]"""
+            elif answer_type == source.models.TaskAnswerType.VARIABLE_ANSWER:
+                pass
 
     def validate_task_event(self):
         self.prepare_environment()
@@ -87,6 +97,9 @@ class TaskManager(object):
 
     def __get_task_answer_type__(self):
         return source.models.Task.get_attribute('answer_type', self.solution.task_id)
+
+    def __get_task_solution_file_id__(self):
+        return source.models.Task.get_attribute('solution_file_id', self.solution.task_id)
 
     def __build__(self) -> 'Return code':
         if BuildHandler.get_execution_type(
@@ -119,6 +132,12 @@ class TaskManager(object):
                     self.tests[test_number].right_answer)) == TaskManager.handle_output_array(user_output):
             return True
         return False
+
+    def is_variable_answer_valid(self, user_output, test_number: int):
+        db = source.models.DataBase()
+        db.execute(SQL_GET_CODE_FILE, self.__get_task_solution_file_id__())
+        code_file_attributes = sequence_to_dict(db.result(), class_CodeFile_attributes)
+        code_file: source.models.CodeFile = source.models.CodeFile(**code_file_attributes)
 
     @staticmethod
     def string_to_array(string) -> List[str]:
@@ -169,6 +188,7 @@ class TaskManager(object):
 
 class BuildHandler(object):
     executable_file_name: str = 'solution_executable'
+    executable_judge_file_name: str = 'judge_solution_executable'
     build_log_file_name: str = 'build_log.out'
 
     def __init__(self, source_file_path: str, language: source.models.Language):
