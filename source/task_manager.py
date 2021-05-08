@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+from typing import List
 
 import source.models
 
@@ -47,11 +48,33 @@ class TaskManager(object):
         self.prepare_environment()
         if self.__build__() != 0:
             self.solution.__update__('verdict', source.models.Verdict.BUILD_FAILED)
+            return
 
-        if self.__execute__() != 0:
-            self.solution.__update__('verdict', source.models.Verdict.RUNTIME_ERROR)
+        correct_tests_number: int = 0
 
-        # build -> for t in test -> check test
+        for test_number, test in enumerate(self.tests):
+            input_file = open(os.path.join(self.env_dir, self.input_file_name), write_mode)
+            input_file.write(test.content)
+            input_file.close()
+
+            print(f'Running on test {test_number + 1}')
+
+            if self.__execute__(test_number=test_number + 1) != 0:
+                self.solution.__update__('verdict', source.models.Verdict.RUNTIME_ERROR)
+                return
+
+            output_file = open(os.path.join(self.env_dir, self.output_file_name), read_mode)
+            user_output = output_file.readlines()
+            output_file.close()
+
+            if self.__get_task_answer_type__() == source.models.TaskAnswerType.CONSTANT_ANSWER:
+                if not self.is_constant_answer_valid(user_output=user_output, test_number=test_number):
+                    self.solution.__update__('verdict', source.models.Verdict.WRONG_ANSWER)
+                else:
+                    correct_tests_number += 1
+            else:
+                """Variable answer. 
+                todo: build && execute judge solution with input = user output && output one of [true, false]"""
 
     def validate_task_event(self):
         self.prepare_environment()
@@ -60,7 +83,10 @@ class TaskManager(object):
         return source.models.Task.get_attribute('grading_system', self.solution.task_id)
 
     def __get_task_time_limit__(self):
-        return source.models.Task.get_attribute('time_limit', self.solution.task_id)
+        return source.models.Task.get_attribute('time_limit_seconds', self.solution.task_id)
+
+    def __get_task_answer_type__(self):
+        return source.models.Task.get_attribute('answer_type', self.solution.task_id)
 
     def __build__(self) -> 'Return code':
         if BuildHandler.get_execution_type(
@@ -71,19 +97,45 @@ class TaskManager(object):
                                                                        self.code_file.file_name),
                                          language=self.code_file.language)
             return build_handler.build()
-        return -1
+        else:
+            return 0
 
-    def __execute__(self):
+    def __execute__(self, test_number: int):
         execute_handler = ExecuteHandler(executable_file_path=self.get_execute_path(self.code_file.language),
                                          language=self.code_file.language,
-                                         time_limit=self.__get_task_time_limit__())
+                                         time_limit=self.__get_task_time_limit__(),
+                                         test_number=test_number)
 
-        execute_handler.execute()
+        return execute_handler.execute()
 
-        """
-        todo: get execute path. for c/c++ it is ~/env/{a.exe}, 
-        for python it is just source and for java it is class name
-        """
+    def is_constant_answer_valid(self, user_output, test_number: int) -> bool:
+
+        print('right ans:\n', TaskManager.string_to_array(
+            self.tests[test_number].right_answer))
+        print('user ans: \n', user_output)
+
+        if TaskManager.handle_output_array(
+                TaskManager.string_to_array(
+                    self.tests[test_number].right_answer)) == TaskManager.handle_output_array(user_output):
+            return True
+        return False
+
+    @staticmethod
+    def string_to_array(string) -> List[str]:
+        result: list = []
+        for line in string.split('\n'):
+            result.append(line)
+        return result
+
+    @staticmethod
+    def string_drop_special_symbols(string: str) -> str:
+        return string.replace('\n', '').replace('\r', '').replace('\t', '')
+
+    @staticmethod
+    def handle_output_array(array: List[str] or List[List[str]]) -> List[List[str]]:
+        for i in range(len(array)):
+            array[i] = TaskManager.string_drop_special_symbols(array[i]).split()
+        return array
 
     # noinspection DuplicatedCode
     def get_execute_path(self, language: source.models.Language):
@@ -109,7 +161,7 @@ class TaskManager(object):
         return os.path.join(self.working_dir, self.env_dir, self.code_file.file_name)
 
     def get_gnu_exe_path(self):
-        return os.path.join(self.working_dir, self.env_dir, BuildHandler.executable_file_name)
+        return os.path.join(self.env_dir, BuildHandler.executable_file_name)
 
     def get_class_name(self):
         return self.code_file.file_name.split('.')[0]
@@ -240,13 +292,12 @@ class ExecuteHandler(object):
 
     def __init__(self, executable_file_path: str,
                  language: source.models.Language,
-                 time_limit: int):
+                 time_limit: int,
+                 test_number: int):
         self.executable_path = executable_file_path
         self.language = language
         self.time_limit = time_limit
-
-        # Only for java:
-        # may be unused:
+        self.test_number = test_number
 
         try:
             self.executable_class = executable_file_path.split('/')[-1].split('.')[0]
@@ -269,7 +320,7 @@ class ExecuteHandler(object):
         }
 
         try:
-            return execute_command[self.language](self.executable_path, exe_class=self.executable_class)
+            return execute_command[self.language](self.executable_path)
         except KeyError:
             return None
 
@@ -278,7 +329,7 @@ class ExecuteHandler(object):
         wd: str = os.getcwd()
         env: str = TaskManager.env_dir
         in_s: str = TaskManager.input_file_name
-        out_s: str = TaskManager.input_file_name
+        out_s: str = TaskManager.output_file_name
         return f' < {os.path.join(wd, env, in_s)} > {os.path.join(wd, env, out_s)}'
 
     @staticmethod
@@ -287,27 +338,27 @@ class ExecuteHandler(object):
 
     @staticmethod
     def gec_gnu_gcc_c99(executable_path: str):
-        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+        return f'./{executable_path}' + ExecuteHandler.get_iostream_route()
 
     @staticmethod
     def gec_gnu_gcc_c11(executable_path: str):
-        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+        return f'./{executable_path}' + ExecuteHandler.get_iostream_route()
 
     @staticmethod
     def gec_gnu_gxx_cxx11(executable_path: str):
-        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+        return f'./{executable_path}' + ExecuteHandler.get_iostream_route()
 
     @staticmethod
     def gec_gnu_gxx_cxx14(executable_path: str):
-        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+        return f'./{executable_path}' + ExecuteHandler.get_iostream_route()
 
     @staticmethod
     def gec_gnu_gxx_cxx17(executable_path: str):
-        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+        return f'./{executable_path}' + ExecuteHandler.get_iostream_route()
 
     @staticmethod
     def gec_gnu_gxx_cxx20(executable_path: str):
-        return f'.{executable_path}' + ExecuteHandler.get_iostream_route()
+        return f'./{executable_path}' + ExecuteHandler.get_iostream_route()
 
     @staticmethod
     def gec_python2(executable_path: str):
@@ -325,6 +376,9 @@ class ExecuteHandler(object):
     def execute(self):
         execute_command: str = self.get_execute_command()
 
+        print(execute_command)
+        print(os.listdir(os.path.join(os.getcwd(), TaskManager.env_dir)))
+
         execute_process = subprocess.Popen(execute_command,
                                            shell=True,
                                            stdout=subprocess.PIPE,
@@ -334,15 +388,19 @@ class ExecuteHandler(object):
             execute_process.wait(self.time_limit)
         except subprocess.TimeoutExpired:
             execute_process.kill()
-            pass  # todo: add return code
 
         status = execute_process.poll()
 
+        print('status is', status)
+
         execute_process.kill()
         stdout, stderr = execute_process.communicate()
-        log = open(os.path.join(os.getcwd(), TaskManager.env_dir, self.execute_log_file_name), 'a')
+        log = open(
+            os.path.join(os.getcwd(), TaskManager.env_dir, f'test_{self.test_number}_' + self.execute_log_file_name),
+            'a')
 
         log.write(stdout.decode('utf-8'))
         log.write(stderr.decode('utf-8'))
+        log.close()
 
         return status

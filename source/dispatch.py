@@ -67,7 +67,7 @@ class Node(SingletonMixin):
                 new_event = Event(solution=new_solution, tests=tests)
                 self.event_queue.put(new_event)
 
-            print(self.event_queue.qsize())
+            print(self.event_queue.qsize(), 'solutions in queue')
             time.sleep(CATCH_SOLUTIONS_DELAY)
 
     def handle_events_queue(self):

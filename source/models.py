@@ -112,8 +112,11 @@ class DataBase(SingletonMixin):
 
 class Test(object):
     def __init__(self, **kwargs):
+        self.right_answer = None
+        self.content = None
         self.id = None
         self.task_id = None
+
         self.set_attributes(**kwargs)
 
     def set_attributes(self, **kwargs):
@@ -214,5 +217,5 @@ class Task(object):
     @staticmethod
     def get_attribute(column: str, id: int):
         db = DataBase()
-        db.execute(SQL_GET_TASK_ATTRIBUTE.format(column, id))
-        return db.result()
+        db.execute(SQL_GET_TASK_ATTRIBUTE.format(attribute=column, id=id))
+        return db.result()[0][0]
