@@ -1,3 +1,5 @@
+# todo: add hash sum to judge solution file name on web-app side cuz it can break everything
+
 import os
 import shutil
 import subprocess
@@ -22,6 +24,8 @@ class TaskManager(object):
         self.code_file: source.models.CodeFile = event.code_file
         self.tests = event.tests
 
+        self.judge_solution_source: source.models.CodeFile = source.models.CodeFile()
+
     def prepare_environment(self):
         env_path: str = os.path.join(self.working_dir, self.env_dir)
         if os.path.exists(env_path):
@@ -43,6 +47,19 @@ class TaskManager(object):
         __output = open(output_file, write_mode)
         __output.close()
 
+        db = source.models.DataBase()
+        db.execute(SQL_GET_CODE_FILE, self.__get_task_solution_file_id__())
+        code_file_attributes = {}
+        for result in db.result():
+            code_file_attributes = sequence_to_dict(result, class_CodeFile_attributes)
+        code_file_obj: source.models.CodeFile = source.models.CodeFile(**code_file_attributes)
+
+        __judge_code = open(os.path.join(self.working_dir, self.env_dir, code_file_obj.file_name), write_mode)
+        __judge_code.write(code_file_obj.code)
+        __judge_code.close()
+
+        self.judge_solution_source = code_file_obj
+
         print(os.listdir(env_path))
 
     def check_solution_event(self):
@@ -51,7 +68,21 @@ class TaskManager(object):
             self.solution.__update__('verdict', source.models.Verdict.BUILD_FAILED)
             return
 
+        _1 = BuildHandler.executable_file_name
+        _2 = BuildHandler.build_log_file_name
+
+        BuildHandler.executable_file_name = BuildHandler.executable_judge_file_name
+        BuildHandler.build_log_file_name = BuildHandler.judge_build_log_file_name
+        self.build_judge_solution(path=os.path.join(self.working_dir,
+                                                    self.env_dir,
+                                                    self.judge_solution_source.file_name),
+                                  lang=self.judge_solution_source.language)
+
+        BuildHandler.executable_file_name = _1
+        BuildHandler.build_log_file_name = _2
+
         correct_tests_number: int = 0
+        points: int = 0
 
         for test_number, test in enumerate(self.tests):
             input_file = open(os.path.join(self.env_dir, self.input_file_name), write_mode)
@@ -84,7 +115,16 @@ class TaskManager(object):
                 if self.is_constant_answer_valid(user_output=user_output, test_number=test_number):
                     correct_tests_number += 1
             elif answer_type == source.models.TaskAnswerType.VARIABLE_ANSWER:
-                pass
+                judge_verdict: int = self.is_variable_answer_valid(user_output=user_output, test_number=test_number)
+                if grading_system == source.models.TaskGradingSystem.BINARY:
+                    correct_tests_number += 1 if judge_verdict > 0 else 0
+                elif grading_system == source.models.TaskGradingSystem.BINARY_FOR_EACH_TEST:
+                    correct_tests_number += 1 if judge_verdict > 0 else 0
+                elif grading_system == source.models.TaskGradingSystem.N_POINTS_FOR_EACH_TEST:
+                    correct_tests_number += 1 if judge_verdict > 0 else 0
+                    points += judge_verdict
+
+        # todo: evaluate correct tests/points to verdict
 
     def validate_task_event(self):
         self.prepare_environment()
@@ -101,13 +141,19 @@ class TaskManager(object):
     def __get_task_solution_file_id__(self):
         return source.models.Task.get_attribute('solution_file_id', self.solution.task_id)
 
-    def __build__(self) -> 'Return code':
+    def build_judge_solution(self, path, lang):
+        return self.__build__(path=path, lang=lang)
+
+    def __build__(self, **kwargs) -> 'Return code':
+        """:param kwargs - can contain 'lang' and 'path' """
         if BuildHandler.get_execution_type(
                 self.code_file.language
+                if 'lang' not in kwargs else kwargs['lang']
         ) == source.models.CodeExecuteType.BUILD_AND_RUN:
             build_handler = BuildHandler(source_file_path=os.path.join(self.working_dir,
                                                                        self.env_dir,
-                                                                       self.code_file.file_name),
+                                                                       self.code_file.file_name
+                                                                       if 'path' not in kwargs else kwargs['path']),
                                          language=self.code_file.language)
             return build_handler.build()
         else:
@@ -133,11 +179,19 @@ class TaskManager(object):
             return True
         return False
 
-    def is_variable_answer_valid(self, user_output, test_number: int):
-        db = source.models.DataBase()
-        db.execute(SQL_GET_CODE_FILE, self.__get_task_solution_file_id__())
-        code_file_attributes = sequence_to_dict(db.result(), class_CodeFile_attributes)
-        code_file: source.models.CodeFile = source.models.CodeFile(**code_file_attributes)
+    def is_variable_answer_valid(self, user_output, test_number: int) -> int or None:
+        judge_execution_handler: ExecuteHandler = ExecuteHandler(
+            executable_file_path=os.path.join(self.working_dir,
+                                              self.env_dir,
+                                              BuildHandler.executable_judge_file_name),
+            language=self.judge_solution_source.language,
+            time_limit=2,
+            test_number=test_number)
+        os.system(f'cp {os.path.join(self.working_dir, self.env_dir, self.output_file_name)} '
+                  f'{os.path.join(self.working_dir, self.env_dir, self.input_file_name)}')
+        judge_execution_handler.execute()
+        output = open(os.path.join(self.working_dir, self.env_dir, self.output_file_name), read_mode)
+        return int(output.read())
 
     @staticmethod
     def string_to_array(string) -> List[str]:
@@ -190,6 +244,7 @@ class BuildHandler(object):
     executable_file_name: str = 'solution_executable'
     executable_judge_file_name: str = 'judge_solution_executable'
     build_log_file_name: str = 'build_log.out'
+    judge_build_log_file_name: str = 'judge_build_log.out'
 
     def __init__(self, source_file_path: str, language: source.models.Language):
         print('build init')
