@@ -73,6 +73,7 @@ class TaskManager(object):
 
         BuildHandler.executable_file_name = BuildHandler.executable_judge_file_name
         BuildHandler.build_log_file_name = BuildHandler.judge_build_log_file_name
+
         self.build_judge_solution(path=os.path.join(self.working_dir,
                                                     self.env_dir,
                                                     self.judge_solution_source.file_name),
@@ -83,6 +84,7 @@ class TaskManager(object):
 
         correct_tests_number: int = 0
         points: int = 0
+        grading_system = None
 
         for test_number, test in enumerate(self.tests):
             input_file = open(os.path.join(self.env_dir, self.input_file_name), write_mode)
@@ -98,15 +100,6 @@ class TaskManager(object):
             output_file = open(os.path.join(self.env_dir, self.output_file_name), read_mode)
             user_output = output_file.readlines()
             output_file.close()
-
-            # if self.__get_task_answer_type__() == source.models.TaskAnswerType.CONSTANT_ANSWER:
-            #     if not self.is_constant_answer_valid(user_output=user_output, test_number=test_number):
-            #         self.solution.__update__('verdict', source.models.Verdict.WRONG_ANSWER)
-            #     else:
-            #         correct_tests_number += 1
-            # else:
-            #     """Variable answer.
-            #     todo: build && execute judge solution with input = user output && output one of [true, false]"""
 
             answer_type = self.__get_task_answer_type__()
             grading_system = self.__get_task_grading_system__()
@@ -124,7 +117,23 @@ class TaskManager(object):
                     correct_tests_number += 1 if judge_verdict > 0 else 0
                     points += judge_verdict
 
-        # todo: evaluate correct tests/points to verdict
+        if grading_system == source.models.TaskGradingSystem.BINARY:
+            self.solution.__update__('points', 1 if correct_tests_number == len(self.tests) else 0)
+            if correct_tests_number == len(self.tests):
+                self.solution.__update__('verdict', source.models.Verdict.CORRECT_SOLUTION)
+            else:
+                self.solution.__update__('verdict', source.models.Verdict.WRONG_ANSWER)
+        else:
+            if correct_tests_number == len(self.tests):
+                self.solution.__update__('verdict', source.models.Verdict.CORRECT_SOLUTION)
+            elif 0 < correct_tests_number < len(self.tests):
+                self.solution.__update__('verdict', source.models.Verdict.PARTIAL_SOLUTION)
+            elif correct_tests_number == 0:
+                self.solution.__update__('verdict', source.models.Verdict.WRONG_ANSWER)
+            if grading_system == source.models.TaskGradingSystem.BINARY_FOR_EACH_TEST:
+                self.solution.__update__('points', correct_tests_number)
+            else:
+                self.solution.__update__('points', points)
 
     def validate_task_event(self):
         self.prepare_environment()
@@ -142,10 +151,11 @@ class TaskManager(object):
         return source.models.Task.get_attribute('solution_file_id', self.solution.task_id)
 
     def build_judge_solution(self, path, lang):
-        return self.__build__(path=path, lang=lang)
+        return self.__build__(path=path, lang=lang, )
 
     def __build__(self, **kwargs) -> 'Return code':
         """:param kwargs - can contain 'lang' and 'path' """
+        print('lang', 0 if 'lang' not in kwargs else kwargs['lang'])
         if BuildHandler.get_execution_type(
                 self.code_file.language
                 if 'lang' not in kwargs else kwargs['lang']
@@ -154,7 +164,8 @@ class TaskManager(object):
                                                                        self.env_dir,
                                                                        self.code_file.file_name
                                                                        if 'path' not in kwargs else kwargs['path']),
-                                         language=self.code_file.language)
+                                         language=self.code_file.language
+                                         if 'lang' not in kwargs else kwargs['lang'])
             return build_handler.build()
         else:
             return 0
@@ -181,16 +192,31 @@ class TaskManager(object):
 
     def is_variable_answer_valid(self, user_output, test_number: int) -> int or None:
         judge_execution_handler: ExecuteHandler = ExecuteHandler(
-            executable_file_path=os.path.join(self.working_dir,
-                                              self.env_dir,
+            executable_file_path=os.path.join(self.env_dir,
                                               BuildHandler.executable_judge_file_name),
             language=self.judge_solution_source.language,
             time_limit=2,
             test_number=test_number)
-        os.system(f'cp {os.path.join(self.working_dir, self.env_dir, self.output_file_name)} '
-                  f'{os.path.join(self.working_dir, self.env_dir, self.input_file_name)}')
-        judge_execution_handler.execute()
+        user_out: str = open(f'{os.path.join(self.working_dir, self.env_dir, self.output_file_name)}', read_mode).read()
+        test_content: str = self.tests[test_number].content
+
+        print('user output:', user_out)
+
+        judge_input_content: str = f'{test_content}\n{user_out}'
+        print('judge input:\n=====\n', judge_input_content, '\n=====')
+
+        __input = open(f'{os.path.join(self.working_dir, self.env_dir, self.input_file_name)}', write_mode)
+        __input.write(judge_input_content)
+        __input.close()
+
+        if judge_execution_handler.execute() != 0:
+            return 0
+
         output = open(os.path.join(self.working_dir, self.env_dir, self.output_file_name), read_mode)
+
+        print('Judge output:', output.read())
+        output.seek(0)
+
         return int(output.read())
 
     @staticmethod
@@ -274,6 +300,7 @@ class BuildHandler(object):
 
     def build(self) -> 'Return code':
         print('build')
+
         build_command: str = self.get_build_command(source_path=self.source_file,
                                                     exe_path=os.path.join(
                                                         self.working_dir,
@@ -281,6 +308,8 @@ class BuildHandler(object):
                                                         self.executable_file_name
                                                     ),
                                                     language=self.language)
+        print()
+        print(build_command)
         build_process = subprocess.Popen(
             build_command,
             shell=True,
@@ -327,6 +356,7 @@ class BuildHandler(object):
                                                             TaskManager.env_dir,
                                                             self.build_log_file_name))
         except KeyError:
+            print('key error')
             return None
 
     @staticmethod
@@ -471,7 +501,9 @@ class ExecuteHandler(object):
         execute_process.kill()
         stdout, stderr = execute_process.communicate()
         log = open(
-            os.path.join(os.getcwd(), TaskManager.env_dir, f'test_{self.test_number}_' + self.execute_log_file_name),
+            os.path.join(os.getcwd(),
+                         TaskManager.env_dir,
+                         f'test_{self.test_number + 1}_' + self.execute_log_file_name),
             'a')
 
         log.write(stdout.decode('utf-8'))
