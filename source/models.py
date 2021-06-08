@@ -123,6 +123,12 @@ class Test(object):
         for key in kwargs.keys():
             setattr(self, key, kwargs[key])
 
+    def __update__(self, field, value):
+        print(field, value, self.id)
+        db = DataBase()
+        db.execute(SQL_UPDATE_TEST.format(field=field, value=value, id=self.id))
+        db.commit()
+
     def __str__(self):
         return f'class Test\n' \
                f'id: {self.id}\n' \
@@ -194,6 +200,7 @@ class Solution(object):
 class Event(object):
 
     def __init__(self, solution: Solution, tests: "Any iterable"):
+        self.event_type = None
         self.solution: Solution = solution
         self.code_file = solution.code_file
         self.tests: List[Test] = tests

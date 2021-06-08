@@ -23,11 +23,11 @@ class_CodeFile_attributes: Tuple = (
 )
 
 class_Test_attributes: Tuple = (
-    'task_id',
+    'id',
     'content',
     'right_answer',
+    'task_id',
     'max_points',
 )
-
 read_mode: str = 'r'
 write_mode: str = 'w'

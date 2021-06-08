@@ -23,6 +23,10 @@ SQL_UPDATE_SOLUTION: str = '''UPDATE management_solution
                         SET {field} = '{value}'
                         WHERE id = {id};'''
 
+SQL_UPDATE_TEST: str = '''UPDATE management_test
+SET {field} = '{value}' 
+WHERE id = {id};'''
+
 SQL_GET_TASK_ATTRIBUTE: str = '''SELECT {attribute}
 FROM management_abstracttask
 WHERE id={id}'''

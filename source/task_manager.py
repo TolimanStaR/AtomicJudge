@@ -62,10 +62,13 @@ class TaskManager(object):
 
         print(os.listdir(env_path))
 
+    # noinspection DuplicatedCode
     def check_solution_event(self):
         self.prepare_environment()
+
         if self.__build__() != 0:
             self.solution.__update__('verdict', source.models.Verdict.BUILD_FAILED)
+            self.solution.__update__('verdict_text', 'Ошибка компиляции')
             return
 
         _1 = BuildHandler.executable_file_name
@@ -93,8 +96,15 @@ class TaskManager(object):
 
             print(f'Running on test {test_number + 1}')
 
-            if self.__execute__(test_number=test_number + 1) != 0:
+            exec_code = self.__execute__(test_number=test_number + 1)
+            print('execute code', exec_code)
+            if exec_code > 0:
                 self.solution.__update__('verdict', source.models.Verdict.RUNTIME_ERROR)
+                self.solution.__update__('verdict_text', f'Ошибка исполнения на тесте {test_number + 1}')
+                return
+            elif exec_code < 0:
+                self.solution.__update__('verdict', source.models.Verdict.TIME_LIMIT_ERROR)
+                self.solution.__update__('verdict_text', f'Превышен лимит времени на тесте {test_number + 1}')
                 return
 
             output_file = open(os.path.join(self.env_dir, self.output_file_name), read_mode)
@@ -121,11 +131,13 @@ class TaskManager(object):
             self.solution.__update__('points', 1 if correct_tests_number == len(self.tests) else 0)
             if correct_tests_number == len(self.tests):
                 self.solution.__update__('verdict', source.models.Verdict.CORRECT_SOLUTION)
+                self.solution.__update__('verdict_text', f'Все тесты пройдены')
             else:
                 self.solution.__update__('verdict', source.models.Verdict.WRONG_ANSWER)
         else:
             if correct_tests_number == len(self.tests):
                 self.solution.__update__('verdict', source.models.Verdict.CORRECT_SOLUTION)
+                self.solution.__update__('verdict_text', f'Все тесты пройдены')
             elif 0 < correct_tests_number < len(self.tests):
                 self.solution.__update__('verdict', source.models.Verdict.PARTIAL_SOLUTION)
             elif correct_tests_number == 0:
@@ -135,8 +147,42 @@ class TaskManager(object):
             else:
                 self.solution.__update__('points', points)
 
+    # noinspection DuplicatedCode
     def validate_task_event(self):
+
+        self.solution.__update__('status', source.models.Status.IN_PROGRESS)
         self.prepare_environment()
+
+        if self.__build__() != 0:
+            self.solution.__update__('verdict', source.models.Verdict.BUILD_FAILED)
+            self.solution.__update__('status', source.models.Status.CHECK_FAILED)
+            return
+
+        for test_number, test in enumerate(self.tests):
+            input_file = open(os.path.join(self.env_dir, self.input_file_name), write_mode)
+            input_file.write(test.content)
+            input_file.close()
+
+            print(f'Running on test {test_number + 1}')
+
+            exec_code = self.__execute__(test_number=test_number)
+            if exec_code > 0:
+                self.solution.__update__('verdict', source.models.Verdict.RUNTIME_ERROR)
+                self.solution.__update__('status', source.models.Status.CHECK_FAILED)
+                return
+            elif exec_code < 0:
+                self.solution.__update__('verdict', source.models.Verdict.TIME_LIMIT_ERROR)
+                self.solution.__update__('status', source.models.Status.CHECK_FAILED)
+                return
+
+            output_file = open(os.path.join(self.env_dir, self.output_file_name), read_mode)
+            judge_output = output_file.read()
+            output_file.close()
+
+            test.__update__('right_answer', judge_output)
+
+        self.solution.__update__('verdict', source.models.Verdict.CORRECT_SOLUTION)
+        self.solution.__update__('status', source.models.Status.CHECK_SUCCESS)
 
     def __get_task_grading_system__(self):
         return source.models.Task.get_attribute('grading_system', self.solution.task_id)
@@ -489,22 +535,26 @@ class ExecuteHandler(object):
                                            stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE)
 
+        time_limit_expired: bool = False
         try:
             execute_process.wait(self.time_limit)
         except subprocess.TimeoutExpired:
+            execute_process.terminate()
             execute_process.kill()
+            print('Time limit exceeded!')
+            print(execute_process.pid)
+            return -1
 
         status = execute_process.poll()
 
         print('status is', status)
-
         execute_process.kill()
+        print(time_limit_expired)
         stdout, stderr = execute_process.communicate()
         log = open(
             os.path.join(os.getcwd(),
                          TaskManager.env_dir,
-                         f'test_{self.test_number + 1}_' + self.execute_log_file_name),
-            'a')
+                         f'test_{self.test_number}_' + self.execute_log_file_name), 'a')
 
         log.write(stdout.decode('utf-8'))
         log.write(stderr.decode('utf-8'))

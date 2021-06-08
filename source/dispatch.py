@@ -9,7 +9,7 @@ from typing import List
 
 from .config import *
 
-from .models import SingletonMixin, Solution, Status, DataBase, CodeFile, Event, Test
+from .models import SingletonMixin, Solution, Status, DataBase, CodeFile, Event, Test, SolutionEventType
 
 from .service import sequence_to_dict
 
@@ -60,6 +60,7 @@ class Node(SingletonMixin):
                 tests: List[Test] = []
 
                 for test_data in db.result():
+                    print(test_data)
                     attributes = sequence_to_dict(test_data, class_Test_attributes)
                     new_test = Test(**attributes)
                     tests.append(new_test)
@@ -75,10 +76,12 @@ class Node(SingletonMixin):
             e = self.get_event_from_queue()
             print(e)
             t = TaskManager(event=e)
-            t.check_solution_event()
-            time.sleep(3)
 
-            # TODO: send every event to TaskManager
+            if e.solution.event_type == SolutionEventType.USER_TASK_SOLUTION:
+                t.check_solution_event()
+            elif e.solution.event_type == SolutionEventType.AUTHOR_TASK_VALIDATION:
+                t.validate_task_event()
+            time.sleep(3)
 
     def get_event_from_queue(self):
         return self.event_queue.get()
